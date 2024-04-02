@@ -25,6 +25,7 @@ async fn sleep_then_print(
     if pending_requests.contains(&block_number) {
         println!("Timer {} is pending.", task_id);
         drop(pending_requests);
+        // TODO: Fix time is bad, should take approach on using channel to notify
         while provider
             .pending_requests
             .lock()
@@ -53,6 +54,7 @@ async fn sleep_then_print(
         .get_transaction_count("0x7f2c6f930306d3aa736b3a6c6a98f512f74036d4", block_number)
         .await
         .map_err(|e| format!("Failed to get transaction count: {:?}", e))?;
+    println!("Timer {} called rpc call", task_id);
 
     let mut request_cache = provider.request_cache.lock().unwrap();
     request_cache.insert(block_number, nonce);
@@ -72,31 +74,36 @@ async fn main() {
     let provider = Arc::new(provider);
 
     let start_time = std::time::Instant::now();
+    // Join is bounded to slowest future
     let nonces = tokio::join!(
         sleep_then_print(provider.clone(), 5604994, 1),
         sleep_then_print(provider.clone(), 5604994, 2),
-        sleep_then_print(provider.clone(), 5604995, 3),
-        sleep_then_print(provider, 5604994, 4),
+        sleep_then_print(provider.clone(), 5604994, 3),
+        sleep_then_print(provider.clone(), 5604994, 4),
+        sleep_then_print(provider.clone(), 5604994, 5),
     );
+
+    // let nonces = tokio::join!(
+    //     sleep_then_print(provider.clone(), 5604990, 1),
+    //     sleep_then_print(provider.clone(), 5604991, 2),
+    //     sleep_then_print(provider.clone(), 5604992, 3),
+    //     sleep_then_print(provider.clone(), 5604993, 4),
+    //     sleep_then_print(provider.clone(), 5604994, 5),
+    // );
 
     let elapsed = start_time.elapsed();
     println!("Total time took {:?}", elapsed);
 
     match nonces {
-        (Ok(nonce1), Ok(nonce2), Ok(nonce3), Ok(nonce4)) => {
-            println!("Nonces: {}, {}, {}, {}", nonce1, nonce2, nonce3, nonce4);
+        (Ok(nonce1), Ok(nonce2), Ok(nonce3), Ok(nonce4), Ok(nonce5)) => {
+            println!("Nonce1: {}", nonce1);
+            println!("Nonce2: {}", nonce2);
+            println!("Nonce3: {}", nonce3);
+            println!("Nonce4: {}", nonce4);
+            println!("Nonce5: {}", nonce5);
         }
-        (Err(e), _, _, _) => {
-            println!("Error: {:?}", e);
-        }
-        (_, Err(e), _, _) => {
-            println!("Error: {:?}", e);
-        }
-        (_, _, Err(e), _) => {
-            println!("Error: {:?}", e);
-        }
-        (_, _, _, Err(e)) => {
-            println!("Error: {:?}", e);
+        _ => {
+            println!("Failed to get nonce");
         }
     }
 }
