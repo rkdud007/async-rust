@@ -2,16 +2,20 @@ use crate::provider::RpcProvider;
 use std::sync::Arc;
 pub mod provider;
 
-async fn sleep_then_print(provider: Arc<RpcProvider>, block_number: u64) -> Result<u64, String> {
+async fn sleep_then_print(
+    provider: Arc<RpcProvider>,
+    block_number: u64,
+    task_id: u64,
+) -> Result<u64, String> {
     let start_time = std::time::Instant::now();
-    println!("Start timer {}.", block_number);
+    println!("Start timer {}.", task_id);
 
     {
         let request_cache = provider.request_cache.lock().unwrap();
         if let Some(nonce) = request_cache.get(&block_number) {
-            println!("Timer {} is cached.", block_number);
+            println!("Timer {} is cached.", task_id);
             let elapsed = start_time.elapsed();
-            println!("Timer {} took {:?}", block_number, elapsed);
+            println!("Timer {} took {:?}", task_id, elapsed);
             return Ok(*nonce);
         }
     }
@@ -19,7 +23,7 @@ async fn sleep_then_print(provider: Arc<RpcProvider>, block_number: u64) -> Resu
     let mut pending_requests = provider.pending_requests.lock().unwrap();
 
     if pending_requests.contains(&block_number) {
-        println!("Timer {} is pending.", block_number);
+        println!("Timer {} is pending.", task_id);
         drop(pending_requests);
         while provider
             .pending_requests
@@ -36,13 +40,15 @@ async fn sleep_then_print(provider: Arc<RpcProvider>, block_number: u64) -> Resu
             .get(&block_number)
             .ok_or_else(|| "Failed to get nonce after waiting for pending request".to_string())?;
         let elapsed = start_time.elapsed();
-        println!("Timer {} took {:?}", block_number, elapsed);
+        println!(
+            "Timer get from request_cache {} took {:?}",
+            task_id, elapsed
+        );
         return Ok(nonce);
     } else {
         pending_requests.insert(block_number);
         drop(pending_requests);
     }
-
     let nonce = provider
         .get_transaction_count("0x7f2c6f930306d3aa736b3a6c6a98f512f74036d4", block_number)
         .await
@@ -53,9 +59,8 @@ async fn sleep_then_print(provider: Arc<RpcProvider>, block_number: u64) -> Resu
 
     let mut pending_requests = provider.pending_requests.lock().unwrap();
     pending_requests.remove(&block_number);
-
     let elapsed = start_time.elapsed();
-    println!("Timer {} took {:?}", block_number, elapsed);
+    println!("Timer finish from rpc call {} took {:?}", task_id, elapsed);
 
     Ok(nonce)
 }
@@ -68,10 +73,10 @@ async fn main() {
 
     let start_time = std::time::Instant::now();
     let nonces = tokio::join!(
-        sleep_then_print(provider.clone(), 5604994),
-        sleep_then_print(provider.clone(), 5604994),
-        sleep_then_print(provider.clone(), 5604994),
-        sleep_then_print(provider, 5604994),
+        sleep_then_print(provider.clone(), 5604994, 1),
+        sleep_then_print(provider.clone(), 5604994, 2),
+        sleep_then_print(provider.clone(), 5604995, 3),
+        sleep_then_print(provider, 5604994, 4),
     );
 
     let elapsed = start_time.elapsed();
